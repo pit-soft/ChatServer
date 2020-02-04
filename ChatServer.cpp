@@ -1,7 +1,8 @@
 //
-// ChatServer.cpp
+// ChatServer test
 // 
 // evolved from one of the boost chat_server examples (1.69)
+// https://github.com/boostorg/asio/blob/boost-1.69.0/example/cpp17/coroutines_ts/chat_server.cpp
 // Copyright (c) 2003-2018 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
