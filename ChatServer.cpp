@@ -49,7 +49,7 @@ typedef std::shared_ptr<chat_participant> chat_participant_ptr;
 class chat_room
 {
 public:
-    chat_room(std::string _name) : name(_name) {};
+    chat_room(std::string name) : name_(name) {};
     void join(chat_participant_ptr participant)
     {
         std::lock_guard<std::mutex> lock(participants_mutex);
@@ -63,12 +63,12 @@ public:
     }
 
     void deliver(std::string msg);
-
-    std::string name;
+    std::string name() { return name_; }
 
 private:
     std::set<chat_participant_ptr> participants_;
     std::mutex participants_mutex;
+    std::string name_;
 };
 
 typedef std::shared_ptr<chat_room> chat_room_ptr;
@@ -131,6 +131,20 @@ public:
             room->join(shared_from_this());
     }
 
+    void unsubscribe(const std::string& room_name)
+    {
+        for (auto it = subscribed_rooms.begin(); it != subscribed_rooms.end(); ++it)
+        {
+            auto room = *it;
+            if (room->name() == room_name)
+            {
+                room->leave(shared_from_this());
+                subscribed_rooms.erase(it);
+                break;
+            }
+        }
+    }
+
     void deliver(const std::string& msg)
     {
         {
@@ -157,7 +171,7 @@ private:
 
                 if (read_msg[0] == '/') // any "/command"
                 {
-                    int i = 1;
+                    std::size_t  i = 1;
                     for (; i < n; i++) // determine the command
                         if (!is_char_id(read_msg[i]))
                             break;
@@ -165,7 +179,7 @@ private:
                     {
                         std::string cmd = read_msg.substr(1, i - 1);
                         std::string param;
-                        int j = i+1;
+                        std::size_t  j = i+1;
                         for (; j < n; j++) // determine the parameter (login name etc.)
                             if (!is_char_id(read_msg[j]))
                                 break;
@@ -181,19 +195,18 @@ private:
                             subscribe("general");
                             deliver("System: logged in.\n");
                         }
-                        if (cmd == "subscribe")
-                        {
+                        else if (cmd == "subscribe")
                             subscribe(param);
-                            deliver("System: subscribed.\n");
-                        }
+                        else if (cmd == "unsubscribe")
+                            unsubscribe(param);
                     }
                 }
-                else if (name.length())
+                else if (name.length()) // any other message: chat text. (if we have logged in before)
                 {
                     n += name.length();
                     read_msg.insert(0, name);
                     if(!subscribed_rooms.empty())
-                        subscribed_rooms.front()->deliver(read_msg.substr(0, n));
+                        subscribed_rooms.front()->deliver(read_msg.substr(0, n)); // we only post to one room (the last one subscribed to)
                 }
                 read_msg.erase(0, n);
                 std::cerr << "reader#" << id << std::endl;
@@ -322,7 +335,7 @@ int main(int argc, char* argv[])
 
 void chat_room::deliver(std::string msg)
 {
-    msg = name + "]" + msg;
+    msg = name_ + "]" + msg;
     std::lock_guard<std::mutex> lock(participants_mutex);
     for (auto participant : participants_)
         participant->deliver(msg);
