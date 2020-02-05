@@ -35,12 +35,17 @@ using boost::asio::experimental::detached;
 using boost::asio::experimental::redirect_error;
 namespace this_coro = boost::asio::experimental::this_coro;
 
+#define MAX_CLIENTS 221
 std::string getPacket(bool login, int i)
 {
     std::string packet(login?"/login ":"");
     packet.append(std::to_string(i));
-    if(i%10==0)
-        packet.append(" <=================================================================");
+    if(i==1)
+        packet.append(" START <================================================================");
+    else if (i == MAX_CLIENTS)
+        packet.append(" STOP <=================================================================");
+    else
+        packet.append("                                                                        ");
     packet.push_back('\n');
     return packet;
 }
@@ -52,7 +57,7 @@ int main(int argc, char* argv[])
     try
     {
         std::vector<std::thread*> threads;
-        for (auto i = 0; i < 222; i++)
+        for (auto i = 1; i <= MAX_CLIENTS; i++)
         {
             int r = dist(gen); // give each client some random number
             threads.push_back(new std::thread([i,r]()
@@ -64,15 +69,18 @@ int main(int argc, char* argv[])
                 s.connect(endpoint);
 
                 s.write_some(boost::asio::buffer(getPacket(true, i)));
-                const auto packet = getPacket(false, r);
+                const auto packet = getPacket(false, i);
+                if (i == MAX_CLIENTS)
+                    std::this_thread::sleep_for(std::chrono::seconds(3)); // for the last one, we wait first
                 s.write_some(boost::asio::buffer(packet)); // create some spam
                 s.write_some(boost::asio::buffer(packet));
-                std::this_thread::sleep_for(std::chrono::milliseconds(100*r));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100*(i%10)));
                 s.write_some(boost::asio::buffer(packet));
-                s.write_some(boost::asio::buffer(std::string("/subscribe ").append(std::to_string(i % 10)).append("\n")));
+                s.write_some(boost::asio::buffer(std::string("/subscribe ").append(std::to_string(i%10)).append("\n")));
                 s.write_some(boost::asio::buffer(packet));
                 s.write_some(boost::asio::buffer(packet));
-                std::this_thread::sleep_for(std::chrono::seconds(50));
+                //if(i!= MAX_CLIENTS)
+                    std::this_thread::sleep_for(std::chrono::seconds(5)); // listen for at least some of the spam to come back
              }));
         }
         for (auto thread : threads)

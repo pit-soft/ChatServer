@@ -64,6 +64,7 @@ public:
 
     void deliver(std::string msg);
     std::string name() { return name_; }
+    auto size() { return participants_.size(); }
 
 private:
     std::set<chat_participant_ptr> participants_;
@@ -81,13 +82,14 @@ chat_room_ptr get_room(std::string name)
     auto it = rooms.find(name);
     if (it != rooms.end())
         return it->second;
+    std::cerr << "new room " << name << std::endl;
     return rooms[name] = std::make_shared<chat_room>(name);
 }
 
 
 //----------------------------------------------------------------------
 
-inline bool is_char_id(char c) { return ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')); } // acceptable chars for login or channel names
+inline bool is_char_id(char c) { return (c == '#' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')); } // acceptable chars for login or channel names
 static int nextid = 0;
 
 class chat_participant:
@@ -113,21 +115,36 @@ public:
             detached);
     }
 
-    void subscribe(const std::string& room_name)
+    void subscribe(const std::string &room_name)
     {
         chat_room_ptr room = get_room(room_name);
-        bool found = false;
+ /*     if(room->size()>=99) // just an idea at what to do better when rooms get too big
+        {
+            std::string increased_name;
+            for (int i = 1; i < 100; ++i)
+            {
+                increased_name = room_name;
+                increased_name.append("#");
+                increased_name.append(std::to_string(i));
+                room = get_room(increased_name);
+                if (room->size() < 99)
+                    break;
+            }
+        } */
+        if (room->size() >= 199)
+            return; // sorry bud. we're full.
+        bool already_subbed = false;
         for (auto it = subscribed_rooms.begin(); it != subscribed_rooms.end(); ++it)
         {
             if (*it == room) 
             {
-                found = true;
+                already_subbed = true;
                 subscribed_rooms.erase(it); 
                 break;
             }
         }
-        subscribed_rooms.push_front(room);
-        if (!found)
+        subscribed_rooms.push_front(room); // evenn if we already subscribed here, we want it at the front!
+        if (!already_subbed)
             room->join(shared_from_this());
     }
 
@@ -307,11 +324,11 @@ int main(int argc, char* argv[])
         // instead of just calling io_context.run(); we create multiple threads here:
 
         std::vector<std::thread> threads;
-        int count = std::thread::hardware_concurrency() * 2 + 1;
+        int count_threads = 1; // std::thread::hardware_concurrency() * 2 + 1;
 
-        std::cout << "Creating " << count << " threads.\n";
+        std::cout << "Creating " << count_threads << " threads.\n";
 
-        for (int n = 0; n < count; ++n)
+        for (int n = 0; n < count_threads; ++n)
         {
             threads.emplace_back(
                 [&io_context] {io_context.run(); }
